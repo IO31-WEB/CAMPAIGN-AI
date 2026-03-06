@@ -28,16 +28,25 @@ export default function OnboardingClient() {
     if (step < 4) { setStep(s => s + 1); return }
     setSaving(true)
     try {
-      await fetch('/api/brand-kit', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          agentName: `${form.firstName} ${form.lastName}`.trim(),
-          brokerageName: form.brokerageName,
-          tone: form.tone,
-        }),
-      })
-      router.push('/dashboard')
+    await fetch('/api/brand-kit', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+    agentName: `${form.firstName} ${form.lastName}`.trim(),
+    brokerageName: form.brokerageName,
+    tone: form.tone,
+    }),
+  })
+    await fetch('/api/user/profile', {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+    firstName: form.firstName,
+    lastName: form.lastName,
+    onboardingComplete: true,
+  }),
+})
+router.push('/dashboard')
     } catch {
       toast.error('Something went wrong, please try again.')
     } finally {
