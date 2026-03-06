@@ -6,6 +6,7 @@ import { usePathname } from 'next/navigation'
 import { UserButton } from '@clerk/nextjs'
 import {
   Zap, LayoutDashboard, FolderOpen, Plus, Palette,
+  
   CreditCard, Users, BarChart2, Settings, ChevronLeft,
   ChevronRight, Menu, X, HelpCircle, Megaphone
 } from 'lucide-react'
@@ -119,7 +120,7 @@ export function DashboardSidebar() {
 
         {/* User button */}
         <div className={cn('flex items-center gap-3 px-3 py-2 mt-2', collapsed && 'justify-center')}>
-          <UserButton afterSignOutUrl="/" appearance={{ elements: { avatarBox: 'w-8 h-8' } }} />
+          <UserButton appearance={{ elements: { avatarBox: 'w-8 h-8' } }} />
           {!collapsed && <span className="text-sm text-slate-600">Account</span>}
         </div>
       </div>
