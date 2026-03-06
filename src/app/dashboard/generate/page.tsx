@@ -1,0 +1,384 @@
+'use client'
+
+import { useState } from 'react'
+import { Zap, ArrowRight, Copy, Check, Download, ChevronDown, ChevronUp, AlertTriangle, Loader2, Facebook, Instagram, Mail, Printer, Globe } from 'lucide-react'
+import toast from 'react-hot-toast'
+import Link from 'next/link'
+
+type GenStatus = 'idle' | 'fetching_mls' | 'generating' | 'complete' | 'error'
+
+interface GenStep { id: string; label: string; status: 'pending' | 'active' | 'done' }
+
+interface CampaignResult {
+  campaignId?: string
+  listing: { address: string; price: string; beds: number; baths: number; sqft: number }
+  facebook: Array<{ week: number; theme: string; copy: string; hashtags?: string[] }>
+  instagram: Array<{ week: number; caption: string; hashtags: string[] }>
+  emailJustListed: string
+  emailStillAvailable: string
+}
+
+function CopyButton({ text, label }: { text: string; label?: string }) {
+  const [copied, setCopied] = useState(false)
+  const handleCopy = async () => {
+    await navigator.clipboard.writeText(text)
+    setCopied(true)
+    toast.success('Copied!')
+    setTimeout(() => setCopied(false), 2000)
+  }
+  return (
+    <button onClick={handleCopy} className="flex items-center gap-1.5 text-xs font-medium text-slate-500 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 px-3 py-1.5 rounded-lg transition-all">
+      {copied ? <Check className="w-3.5 h-3.5 text-green-600" /> : <Copy className="w-3.5 h-3.5" />}
+      {label || (copied ? 'Copied!' : 'Copy')}
+    </button>
+  )
+}
+
+function Section({ title, icon: Icon, badge, children }: { title: string; icon: React.ComponentType<any>; badge?: string; children: React.ReactNode }) {
+  const [open, setOpen] = useState(true)
+  return (
+    <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
+      <button onClick={() => setOpen(!open)} className="w-full flex items-center justify-between p-5 text-left hover:bg-slate-50 transition-colors">
+        <div className="flex items-center gap-3">
+          <div className="w-9 h-9 bg-amber-100 rounded-xl flex items-center justify-center"><Icon className="w-4 h-4 text-amber-700" /></div>
+          <span className="font-display font-semibold text-slate-900">{title}</span>
+          {badge && <span className="text-xs text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full">{badge}</span>}
+        </div>
+        {open ? <ChevronUp className="w-4 h-4 text-slate-400" /> : <ChevronDown className="w-4 h-4 text-slate-400" />}
+      </button>
+      {open && <div className="border-t border-slate-100">{children}</div>}
+    </div>
+  )
+}
+
+const GENERATION_STEPS: GenStep[] = [
+  { id: 'mls', label: 'Connecting to MLS & fetching listing data', status: 'pending' },
+  { id: 'facebook', label: 'Writing 6-week Facebook calendar', status: 'pending' },
+  { id: 'instagram', label: 'Writing 6-week Instagram captions', status: 'pending' },
+  { id: 'email', label: 'Writing email copy (Just Listed + Still Available)', status: 'pending' },
+  { id: 'flyer', label: 'Designing print-ready flyer', status: 'pending' },
+]
+
+export default function GeneratePage() {
+  const [mlsId, setMlsId] = useState('')
+  const [status, setStatus] = useState<GenStatus>('idle')
+  const [steps, setSteps] = useState<GenStep[]>(GENERATION_STEPS)
+  const [result, setResult] = useState<CampaignResult | null>(null)
+  const [error, setError] = useState('')
+  const [startTime, setStartTime] = useState(0)
+  const [genTime, setGenTime] = useState(0)
+
+  const updateStep = (id: string, stepStatus: GenStep['status']) => {
+    setSteps(prev => prev.map(s => s.id === id ? { ...s, status: stepStatus } : s))
+  }
+
+  const handleGenerate = async () => {
+    if (!mlsId.trim()) {
+      toast.error('Please enter an MLS listing ID')
+      return
+    }
+
+    setStatus('fetching_mls')
+    setError('')
+    setResult(null)
+    setStartTime(Date.now())
+    setSteps(GENERATION_STEPS.map(s => ({ ...s, status: 'pending' })))
+
+    // Step 1: MLS fetch
+    updateStep('mls', 'active')
+
+    try {
+      const res = await fetch('/api/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mlsId: mlsId.trim() }),
+      })
+
+      if (!res.ok) {
+        const data = await res.json()
+        if (res.status === 403) {
+          setError(data.error || 'Campaign limit reached')
+          setStatus('error')
+          return
+        }
+        throw new Error(data.error || 'Generation failed')
+      }
+
+      // Simulate step progression while waiting for streaming response
+      updateStep('mls', 'done')
+      setStatus('generating')
+
+      const reader = res.body?.getReader()
+      const decoder = new TextDecoder()
+      let buffer = ''
+      let stepIdx = 1
+
+      const stepIds = ['facebook', 'instagram', 'email', 'flyer']
+      let currentStepTimer = setInterval(() => {
+        if (stepIdx < stepIds.length) {
+          if (stepIdx > 0) updateStep(stepIds[stepIdx - 1], 'done')
+          updateStep(stepIds[stepIdx], 'active')
+          stepIdx++
+        } else {
+          clearInterval(currentStepTimer)
+        }
+      }, 12000) // ~12s per step gives ~58s total
+
+      if (reader) {
+        while (true) {
+          const { done, value } = await reader.read()
+          if (done) break
+          buffer += decoder.decode(value, { stream: true })
+        }
+      }
+
+      clearInterval(currentStepTimer)
+      stepIds.forEach(id => updateStep(id, 'done'))
+
+      const data = JSON.parse(buffer)
+      if (data.error) throw new Error(data.error)
+
+      const elapsed = Math.round((Date.now() - startTime) / 1000)
+      setGenTime(elapsed)
+      setResult(data)
+      setStatus('complete')
+      toast.success(`Campaign generated in ${elapsed}s! 🎉`)
+    } catch (err: any) {
+      setError(err.message || 'Something went wrong. Please try again.')
+      setStatus('error')
+      toast.error(err.message || 'Generation failed')
+    }
+  }
+
+  return (
+    <div className="max-w-4xl mx-auto space-y-6">
+      {/* Header */}
+      <div>
+        <h1 className="font-display text-2xl font-semibold text-slate-900">Generate Campaign</h1>
+        <p className="text-sm text-slate-500 mt-1">Enter your MLS listing ID to create a complete 6-week campaign.</p>
+      </div>
+
+      {/* Input card */}
+      <div className="bg-white rounded-2xl border border-slate-200 p-6">
+        <div className="mb-5">
+          <label className="block text-sm font-semibold text-slate-900 mb-2">MLS Listing ID</label>
+          <div className="flex flex-col sm:flex-row gap-3">
+            <input
+              type="text"
+              value={mlsId}
+              onChange={e => setMlsId(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && status === 'idle' && handleGenerate()}
+              placeholder="e.g. 12345678 or TX-MLS-12345"
+              disabled={status !== 'idle' && status !== 'error'}
+              className="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-amber-400 focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed"
+            />
+            <button
+              onClick={handleGenerate}
+              disabled={status !== 'idle' && status !== 'error' || !mlsId.trim()}
+              className="flex-shrink-0 inline-flex items-center justify-center gap-2 bg-slate-900 text-white font-bold px-6 py-3 rounded-xl hover:bg-slate-800 transition-all hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {status === 'idle' || status === 'error' ? (
+                <><Zap className="w-4 h-4 text-amber-400" /> Generate Campaign</>
+              ) : (
+                <><Loader2 className="w-4 h-4 animate-spin" /> Generating...</>
+              )}
+            </button>
+          </div>
+          <p className="text-xs text-slate-500 mt-2">
+            Connected via SimplyRETS MLS API • Supports 500+ MLS boards nationwide
+          </p>
+        </div>
+
+        {/* Progress steps */}
+        {(status === 'fetching_mls' || status === 'generating') && (
+          <div className="border-t border-slate-100 pt-5 space-y-3">
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-xs font-semibold text-slate-700 uppercase tracking-wider">Generating Your Campaign</p>
+              <span className="text-xs text-slate-500 animate-pulse">~60 seconds</span>
+            </div>
+            {steps.map((step) => (
+              <div key={step.id} className="flex items-center gap-3">
+                <div className={`w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 transition-all ${
+                  step.status === 'done' ? 'bg-green-500' :
+                  step.status === 'active' ? 'bg-amber-400' : 'bg-slate-200'
+                }`}>
+                  {step.status === 'done' ? (
+                    <Check className="w-3 h-3 text-white" />
+                  ) : step.status === 'active' ? (
+                    <div className="w-2 h-2 bg-white rounded-full animate-pulse" />
+                  ) : (
+                    <div className="w-2 h-2 bg-slate-400 rounded-full" />
+                  )}
+                </div>
+                <span className={`text-sm transition-all ${
+                  step.status === 'active' ? 'text-slate-900 font-semibold' :
+                  step.status === 'done' ? 'text-slate-500 line-through' :
+                  'text-slate-400'
+                }`}>
+                  {step.label}
+                </span>
+                {step.status === 'active' && (
+                  <Loader2 className="w-3.5 h-3.5 text-amber-500 animate-spin ml-auto flex-shrink-0" />
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Error */}
+      {status === 'error' && error && (
+        <div className="bg-red-50 border border-red-200 rounded-xl p-4 flex items-start gap-3">
+          <AlertTriangle className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
+          <div className="flex-1">
+            <p className="text-sm font-semibold text-red-900">{error}</p>
+            {error.includes('limit') && (
+              <Link href="/dashboard/billing" className="text-xs text-red-700 underline mt-1 inline-block">
+                Upgrade your plan →
+              </Link>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Results */}
+      {status === 'complete' && result && (
+        <div className="space-y-6">
+          {/* Success banner */}
+          <div className="bg-green-50 border border-green-200 rounded-xl p-4 flex items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 bg-green-100 rounded-xl flex items-center justify-center">
+                <Check className="w-4 h-4 text-green-600" />
+              </div>
+              <div>
+                <p className="text-sm font-semibold text-green-900">Campaign generated in {genTime}s!</p>
+                <p className="text-xs text-green-700">{result.listing.address}</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 flex-shrink-0">
+              {result.campaignId && (
+                <Link
+                  href={`/dashboard/campaigns/${result.campaignId}`}
+                  className="text-xs font-medium text-green-700 bg-green-100 hover:bg-green-200 px-3 py-1.5 rounded-lg transition-colors"
+                >
+                  View Campaign →
+                </Link>
+              )}
+              <button
+                onClick={() => { setStatus('idle'); setMlsId('') }}
+                className="text-xs font-medium text-slate-600 bg-white border border-slate-200 hover:bg-slate-50 px-3 py-1.5 rounded-lg transition-colors"
+              >
+                New Campaign
+              </button>
+            </div>
+          </div>
+
+          {/* Listing summary */}
+          <div className="bg-white rounded-xl border border-slate-200 p-5 flex flex-wrap gap-6">
+            <div>
+              <p className="text-xs text-slate-500 uppercase tracking-wider font-semibold mb-0.5">Address</p>
+              <p className="font-semibold text-slate-900">{result.listing.address}</p>
+            </div>
+            <div>
+              <p className="text-xs text-slate-500 uppercase tracking-wider font-semibold mb-0.5">Price</p>
+              <p className="font-semibold text-slate-900">{result.listing.price}</p>
+            </div>
+            <div>
+              <p className="text-xs text-slate-500 uppercase tracking-wider font-semibold mb-0.5">Details</p>
+              <p className="font-semibold text-slate-900">{result.listing.beds}bd · {result.listing.baths}ba · {result.listing.sqft?.toLocaleString()} sqft</p>
+            </div>
+          </div>
+
+          {/* Facebook */}
+          <Section title="Facebook Posts" icon={Facebook} badge={`${result.facebook.length} posts`}>
+            <div className="divide-y divide-slate-100">
+              {result.facebook.map((post, i) => (
+                <div key={i} className="p-5">
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Week {post.week}</span>
+                      <span className="text-xs text-amber-700 bg-amber-50 px-2 py-0.5 rounded font-medium">{post.theme}</span>
+                    </div>
+                    <CopyButton text={post.copy} />
+                  </div>
+                  <p className="text-sm text-slate-700 leading-relaxed whitespace-pre-wrap">{post.copy}</p>
+                  {post.hashtags && (
+                    <div className="flex flex-wrap gap-1.5 mt-3">
+                      {post.hashtags.map((tag, j) => <span key={j} className="text-xs text-blue-600">#{tag.replace('#', '')}</span>)}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+            <div className="p-4 bg-slate-50 border-t border-slate-100">
+              <CopyButton text={result.facebook.map(p => `Week ${p.week} — ${p.theme}\n\n${p.copy}`).join('\n\n---\n\n')} label="Copy All 6 Posts" />
+            </div>
+          </Section>
+
+          {/* Instagram */}
+          <Section title="Instagram Captions" icon={Instagram} badge={`${result.instagram.length} posts`}>
+            <div className="divide-y divide-slate-100">
+              {result.instagram.map((post, i) => (
+                <div key={i} className="p-5">
+                  <div className="flex items-center justify-between mb-3">
+                    <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Week {post.week}</span>
+                    <CopyButton text={`${post.caption}\n\n${post.hashtags.join(' ')}`} />
+                  </div>
+                  <p className="text-sm text-slate-700 leading-relaxed whitespace-pre-wrap">{post.caption}</p>
+                  <div className="flex flex-wrap gap-1.5 mt-3">
+                    {post.hashtags.map((tag, j) => <span key={j} className="text-xs text-blue-600">{tag.startsWith('#') ? tag : `#${tag}`}</span>)}
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="p-4 bg-slate-50 border-t border-slate-100">
+              <CopyButton text={result.instagram.map(p => `${p.caption}\n\n${p.hashtags.join(' ')}`).join('\n\n---\n\n')} label="Copy All 6 Captions" />
+            </div>
+          </Section>
+
+          {/* Emails */}
+          <Section title="Email Copy" icon={Mail} badge="2 templates">
+            <div className="divide-y divide-slate-100">
+              <div className="p-5">
+                <div className="flex items-center justify-between mb-3">
+                  <span className="font-semibold text-sm text-slate-900">Just Listed Email</span>
+                  <CopyButton text={result.emailJustListed} />
+                </div>
+                <div className="bg-slate-50 rounded-xl p-4 text-sm text-slate-700 leading-relaxed whitespace-pre-wrap font-serif border border-slate-100">
+                  {result.emailJustListed}
+                </div>
+              </div>
+              <div className="p-5">
+                <div className="flex items-center justify-between mb-3">
+                  <span className="font-semibold text-sm text-slate-900">Still Available Email</span>
+                  <CopyButton text={result.emailStillAvailable} />
+                </div>
+                <div className="bg-slate-50 rounded-xl p-4 text-sm text-slate-700 leading-relaxed whitespace-pre-wrap font-serif border border-slate-100">
+                  {result.emailStillAvailable}
+                </div>
+              </div>
+            </div>
+          </Section>
+
+          {/* Flyer placeholder */}
+          <Section title="Print-Ready Flyer" icon={Printer} badge="PDF">
+            <div className="p-6 text-center">
+              <div className="w-16 h-20 bg-slate-100 rounded-xl mx-auto mb-4 flex items-center justify-center border-2 border-dashed border-slate-200">
+                <Printer className="w-7 h-7 text-slate-400" />
+              </div>
+              <p className="text-sm text-slate-700 font-semibold mb-1">Flyer Generation</p>
+              <p className="text-xs text-slate-500 mb-4 max-w-sm mx-auto">
+                PDF flyer generation via headless browser is processing. Check back in the campaign view, or download from your campaign history.
+              </p>
+              {result.campaignId && (
+                <Link href={`/dashboard/campaigns/${result.campaignId}`} className="inline-flex items-center gap-2 text-sm font-medium text-amber-700 bg-amber-50 hover:bg-amber-100 px-4 py-2 rounded-xl transition-colors">
+                  Check Campaign Status <ArrowRight className="w-3.5 h-3.5" />
+                </Link>
+              )}
+            </div>
+          </Section>
+        </div>
+      )}
+    </div>
+  )
+}
