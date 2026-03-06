@@ -17,6 +17,7 @@ const ProfileSchema = z.object({
   licenseNumber: z.string().max(50).optional(),
   mlsAgentId: z.string().max(50).optional(),
   timezone: z.string().max(50).optional(),
+  onboardingComplete: z.boolean().optional(),
 })
 
 export async function PATCH(request: NextRequest) {
