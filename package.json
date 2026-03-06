@@ -59,3 +59,4 @@
     "typescript": "^5"
   }
 }
+"postbuild": "npx drizzle-kit push"
