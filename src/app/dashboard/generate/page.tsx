@@ -1,21 +1,21 @@
 'use client'
 
 import { useState } from 'react'
-import { Zap, ArrowRight, Copy, Check, Download, ChevronDown, ChevronUp, AlertTriangle, Loader2, Facebook, Instagram, Mail, Printer, Globe } from 'lucide-react'
+import { Zap, ArrowRight, Copy, Check, ChevronDown, ChevronUp, AlertTriangle, Loader2, Facebook, Instagram, Mail, Printer } from 'lucide-react'
 import toast from 'react-hot-toast'
 import Link from 'next/link'
 
-type GenStatus = 'idle' | 'fetching_mls' | 'generating' | 'complete' | 'error'
-
+type GenStatus = 'idle' | 'generating' | 'complete' | 'error'
 interface GenStep { id: string; label: string; status: 'pending' | 'active' | 'done' }
-
 interface CampaignResult {
   campaignId?: string
+  isDemo?: boolean
   listing: { address: string; price: string; beds: number; baths: number; sqft: number }
   facebook: Array<{ week: number; theme: string; copy: string; hashtags?: string[] }>
   instagram: Array<{ week: number; caption: string; hashtags: string[] }>
   emailJustListed: string
   emailStillAvailable: string
+  generationMs?: number
 }
 
 function CopyButton({ text, label }: { text: string; label?: string }) {
@@ -51,108 +51,88 @@ function Section({ title, icon: Icon, badge, children }: { title: string; icon: 
   )
 }
 
-const GENERATION_STEPS: GenStep[] = [
+const STEPS: GenStep[] = [
   { id: 'mls', label: 'Connecting to MLS & fetching listing data', status: 'pending' },
   { id: 'facebook', label: 'Writing 6-week Facebook calendar', status: 'pending' },
   { id: 'instagram', label: 'Writing 6-week Instagram captions', status: 'pending' },
   { id: 'email', label: 'Writing email copy (Just Listed + Still Available)', status: 'pending' },
-  { id: 'flyer', label: 'Designing print-ready flyer', status: 'pending' },
+  { id: 'saving', label: 'Saving campaign to your account', status: 'pending' },
 ]
 
 export default function GeneratePage() {
   const [mlsId, setMlsId] = useState('')
   const [status, setStatus] = useState<GenStatus>('idle')
-  const [steps, setSteps] = useState<GenStep[]>(GENERATION_STEPS)
+  const [steps, setSteps] = useState<GenStep[]>(STEPS)
   const [result, setResult] = useState<CampaignResult | null>(null)
   const [error, setError] = useState('')
-  const [startTime, setStartTime] = useState(0)
   const [genTime, setGenTime] = useState(0)
 
-  const updateStep = (id: string, stepStatus: GenStep['status']) => {
-    setSteps(prev => prev.map(s => s.id === id ? { ...s, status: stepStatus } : s))
-  }
+  const updateStep = (id: string, s: GenStep['status']) =>
+    setSteps(prev => prev.map(step => step.id === id ? { ...step, status: s } : step))
 
   const handleGenerate = async () => {
-    if (!mlsId.trim()) {
-      toast.error('Please enter an MLS listing ID')
-      return
-    }
+    const trimmed = mlsId.trim()
+    if (!trimmed) { toast.error('Please enter an MLS listing ID'); return }
 
-    setStatus('fetching_mls')
+    setStatus('generating')
     setError('')
     setResult(null)
-    setStartTime(Date.now())
-    setSteps(GENERATION_STEPS.map(s => ({ ...s, status: 'pending' })))
+    setSteps(STEPS.map(s => ({ ...s, status: 'pending' })))
 
-    // Step 1: MLS fetch
+    const startTime = Date.now()
+
+    // Animate steps while waiting for the API
     updateStep('mls', 'active')
+    const stepIds = ['mls', 'facebook', 'instagram', 'email', 'saving']
+    let stepIdx = 0
+    const timer = setInterval(() => {
+      if (stepIdx < stepIds.length - 1) {
+        updateStep(stepIds[stepIdx], 'done')
+        stepIdx++
+        updateStep(stepIds[stepIdx], 'active')
+      }
+    }, 11000)
 
     try {
       const res = await fetch('/api/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ mlsId: mlsId.trim() }),
+        body: JSON.stringify({ mlsId: trimmed }),
       })
 
+      clearInterval(timer)
+
+      // Mark all steps done
+      stepIds.forEach(id => updateStep(id, 'done'))
+
+      const data = await res.json()
+
       if (!res.ok) {
-        const data = await res.json()
         if (res.status === 403) {
-          setError(data.error || 'Campaign limit reached')
+          setError(data.error || 'Campaign limit reached. Please upgrade.')
           setStatus('error')
           return
         }
-        throw new Error(data.error || 'Generation failed')
+        throw new Error(data.error || `Request failed (${res.status})`)
       }
-
-      // Simulate step progression while waiting for streaming response
-      updateStep('mls', 'done')
-      setStatus('generating')
-
-      const reader = res.body?.getReader()
-      const decoder = new TextDecoder()
-      let buffer = ''
-      let stepIdx = 1
-
-      const stepIds = ['facebook', 'instagram', 'email', 'flyer']
-      let currentStepTimer = setInterval(() => {
-        if (stepIdx < stepIds.length) {
-          if (stepIdx > 0) updateStep(stepIds[stepIdx - 1], 'done')
-          updateStep(stepIds[stepIdx], 'active')
-          stepIdx++
-        } else {
-          clearInterval(currentStepTimer)
-        }
-      }, 12000) // ~12s per step gives ~58s total
-
-      if (reader) {
-        while (true) {
-          const { done, value } = await reader.read()
-          if (done) break
-          buffer += decoder.decode(value, { stream: true })
-        }
-      }
-
-      clearInterval(currentStepTimer)
-      stepIds.forEach(id => updateStep(id, 'done'))
-
-      const data = JSON.parse(buffer)
-      if (data.error) throw new Error(data.error)
 
       const elapsed = Math.round((Date.now() - startTime) / 1000)
       setGenTime(elapsed)
       setResult(data)
       setStatus('complete')
-      toast.success(`Campaign generated in ${elapsed}s! 🎉`)
+      toast.success(`Campaign ready in ${elapsed}s! 🎉`)
+
     } catch (err: any) {
-      setError(err.message || 'Something went wrong. Please try again.')
+      clearInterval(timer)
+      const msg = err.message || 'Something went wrong. Please try again.'
+      setError(msg)
       setStatus('error')
-      toast.error(err.message || 'Generation failed')
+      toast.error(msg)
     }
   }
 
   return (
     <div className="max-w-4xl mx-auto space-y-6">
-      {/* Header */}
       <div>
         <h1 className="font-display text-2xl font-semibold text-slate-900">Generate Campaign</h1>
         <p className="text-sm text-slate-500 mt-1">Enter your MLS listing ID to create a complete 6-week campaign.</p>
@@ -167,21 +147,20 @@ export default function GeneratePage() {
               type="text"
               value={mlsId}
               onChange={e => setMlsId(e.target.value)}
-              onKeyDown={e => e.key === 'Enter' && status === 'idle' && handleGenerate()}
-              placeholder="e.g. 12345678 or TX-MLS-12345"
-              disabled={status !== 'idle' && status !== 'error'}
-              className="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-amber-400 focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed"
+              onKeyDown={e => e.key === 'Enter' && (status === 'idle' || status === 'error') && handleGenerate()}
+              placeholder="e.g. 1234567 or TX-MLS-12345"
+              disabled={status === 'generating'}
+              className="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-amber-400 focus:border-transparent disabled:opacity-50"
             />
             <button
               onClick={handleGenerate}
-              disabled={status !== 'idle' && status !== 'error' || !mlsId.trim()}
-              className="flex-shrink-0 inline-flex items-center justify-center gap-2 bg-slate-900 text-white font-bold px-6 py-3 rounded-xl hover:bg-slate-800 transition-all hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+              disabled={status === 'generating' || !mlsId.trim()}
+              className="flex-shrink-0 inline-flex items-center justify-center gap-2 bg-slate-900 text-white font-bold px-6 py-3 rounded-xl hover:bg-slate-800 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {status === 'idle' || status === 'error' ? (
-                <><Zap className="w-4 h-4 text-amber-400" /> Generate Campaign</>
-              ) : (
-                <><Loader2 className="w-4 h-4 animate-spin" /> Generating...</>
-              )}
+              {status === 'generating'
+                ? <><Loader2 className="w-4 h-4 animate-spin" /> Generating...</>
+                : <><Zap className="w-4 h-4 text-amber-400" /> Generate Campaign</>
+              }
             </button>
           </div>
           <p className="text-xs text-slate-500 mt-2">
@@ -190,36 +169,27 @@ export default function GeneratePage() {
         </div>
 
         {/* Progress steps */}
-        {(status === 'fetching_mls' || status === 'generating') && (
+        {status === 'generating' && (
           <div className="border-t border-slate-100 pt-5 space-y-3">
             <div className="flex items-center justify-between mb-2">
               <p className="text-xs font-semibold text-slate-700 uppercase tracking-wider">Generating Your Campaign</p>
               <span className="text-xs text-slate-500 animate-pulse">~60 seconds</span>
             </div>
-            {steps.map((step) => (
+            {steps.map(step => (
               <div key={step.id} className="flex items-center gap-3">
                 <div className={`w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 transition-all ${
                   step.status === 'done' ? 'bg-green-500' :
                   step.status === 'active' ? 'bg-amber-400' : 'bg-slate-200'
                 }`}>
-                  {step.status === 'done' ? (
-                    <Check className="w-3 h-3 text-white" />
-                  ) : step.status === 'active' ? (
-                    <div className="w-2 h-2 bg-white rounded-full animate-pulse" />
-                  ) : (
-                    <div className="w-2 h-2 bg-slate-400 rounded-full" />
-                  )}
+                  {step.status === 'done' ? <Check className="w-3 h-3 text-white" /> :
+                   step.status === 'active' ? <div className="w-2 h-2 bg-white rounded-full animate-pulse" /> :
+                   <div className="w-2 h-2 bg-slate-400 rounded-full" />}
                 </div>
                 <span className={`text-sm transition-all ${
                   step.status === 'active' ? 'text-slate-900 font-semibold' :
-                  step.status === 'done' ? 'text-slate-500 line-through' :
-                  'text-slate-400'
-                }`}>
-                  {step.label}
-                </span>
-                {step.status === 'active' && (
-                  <Loader2 className="w-3.5 h-3.5 text-amber-500 animate-spin ml-auto flex-shrink-0" />
-                )}
+                  step.status === 'done' ? 'text-slate-400 line-through' : 'text-slate-400'
+                }`}>{step.label}</span>
+                {step.status === 'active' && <Loader2 className="w-3.5 h-3.5 text-amber-500 animate-spin ml-auto" />}
               </div>
             ))}
           </div>
@@ -251,23 +221,20 @@ export default function GeneratePage() {
                 <Check className="w-4 h-4 text-green-600" />
               </div>
               <div>
-                <p className="text-sm font-semibold text-green-900">Campaign generated in {genTime}s!</p>
+                <p className="text-sm font-semibold text-green-900">
+                  Campaign generated in {genTime}s!
+                  {result.isDemo && <span className="ml-2 text-xs font-normal text-amber-700 bg-amber-100 px-2 py-0.5 rounded-full">Demo listing data</span>}
+                </p>
                 <p className="text-xs text-green-700">{result.listing.address}</p>
               </div>
             </div>
             <div className="flex items-center gap-2 flex-shrink-0">
               {result.campaignId && (
-                <Link
-                  href={`/dashboard/campaigns/${result.campaignId}`}
-                  className="text-xs font-medium text-green-700 bg-green-100 hover:bg-green-200 px-3 py-1.5 rounded-lg transition-colors"
-                >
+                <Link href={`/dashboard/campaigns/${result.campaignId}`} className="text-xs font-medium text-green-700 bg-green-100 hover:bg-green-200 px-3 py-1.5 rounded-lg transition-colors">
                   View Campaign →
                 </Link>
               )}
-              <button
-                onClick={() => { setStatus('idle'); setMlsId('') }}
-                className="text-xs font-medium text-slate-600 bg-white border border-slate-200 hover:bg-slate-50 px-3 py-1.5 rounded-lg transition-colors"
-              >
+              <button onClick={() => { setStatus('idle'); setMlsId(''); setResult(null) }} className="text-xs font-medium text-slate-600 bg-white border border-slate-200 hover:bg-slate-50 px-3 py-1.5 rounded-lg transition-colors">
                 New Campaign
               </button>
             </div>
@@ -290,9 +257,9 @@ export default function GeneratePage() {
           </div>
 
           {/* Facebook */}
-          <Section title="Facebook Posts" icon={Facebook} badge={`${result.facebook.length} posts`}>
+          <Section title="Facebook Posts" icon={Facebook} badge={`${result.facebook?.length ?? 0} posts`}>
             <div className="divide-y divide-slate-100">
-              {result.facebook.map((post, i) => (
+              {result.facebook?.map((post, i) => (
                 <div key={i} className="p-5">
                   <div className="flex items-center justify-between mb-3">
                     <div className="flex items-center gap-2">
@@ -311,28 +278,28 @@ export default function GeneratePage() {
               ))}
             </div>
             <div className="p-4 bg-slate-50 border-t border-slate-100">
-              <CopyButton text={result.facebook.map(p => `Week ${p.week} — ${p.theme}\n\n${p.copy}`).join('\n\n---\n\n')} label="Copy All 6 Posts" />
+              <CopyButton text={result.facebook?.map(p => `Week ${p.week} — ${p.theme}\n\n${p.copy}`).join('\n\n---\n\n') ?? ''} label="Copy All 6 Posts" />
             </div>
           </Section>
 
           {/* Instagram */}
-          <Section title="Instagram Captions" icon={Instagram} badge={`${result.instagram.length} posts`}>
+          <Section title="Instagram Captions" icon={Instagram} badge={`${result.instagram?.length ?? 0} posts`}>
             <div className="divide-y divide-slate-100">
-              {result.instagram.map((post, i) => (
+              {result.instagram?.map((post, i) => (
                 <div key={i} className="p-5">
                   <div className="flex items-center justify-between mb-3">
                     <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Week {post.week}</span>
-                    <CopyButton text={`${post.caption}\n\n${post.hashtags.join(' ')}`} />
+                    <CopyButton text={`${post.caption}\n\n${post.hashtags?.join(' ')}`} />
                   </div>
                   <p className="text-sm text-slate-700 leading-relaxed whitespace-pre-wrap">{post.caption}</p>
                   <div className="flex flex-wrap gap-1.5 mt-3">
-                    {post.hashtags.map((tag, j) => <span key={j} className="text-xs text-blue-600">{tag.startsWith('#') ? tag : `#${tag}`}</span>)}
+                    {post.hashtags?.map((tag, j) => <span key={j} className="text-xs text-blue-600">{tag.startsWith('#') ? tag : `#${tag}`}</span>)}
                   </div>
                 </div>
               ))}
             </div>
             <div className="p-4 bg-slate-50 border-t border-slate-100">
-              <CopyButton text={result.instagram.map(p => `${p.caption}\n\n${p.hashtags.join(' ')}`).join('\n\n---\n\n')} label="Copy All 6 Captions" />
+              <CopyButton text={result.instagram?.map(p => `${p.caption}\n\n${p.hashtags?.join(' ')}`).join('\n\n---\n\n') ?? ''} label="Copy All 6 Captions" />
             </div>
           </Section>
 
@@ -360,19 +327,19 @@ export default function GeneratePage() {
             </div>
           </Section>
 
-          {/* Flyer placeholder */}
-          <Section title="Print-Ready Flyer" icon={Printer} badge="PDF">
+          {/* Flyer */}
+          <Section title="Print-Ready Flyer" icon={Printer} badge="Coming Soon">
             <div className="p-6 text-center">
               <div className="w-16 h-20 bg-slate-100 rounded-xl mx-auto mb-4 flex items-center justify-center border-2 border-dashed border-slate-200">
                 <Printer className="w-7 h-7 text-slate-400" />
               </div>
-              <p className="text-sm text-slate-700 font-semibold mb-1">Flyer Generation</p>
+              <p className="text-sm text-slate-700 font-semibold mb-1">PDF Flyer Generation</p>
               <p className="text-xs text-slate-500 mb-4 max-w-sm mx-auto">
-                PDF flyer generation via headless browser is processing. Check back in the campaign view, or download from your campaign history.
+                PDF flyer generation is coming in the next update. Your campaign content is saved and ready to use.
               </p>
               {result.campaignId && (
                 <Link href={`/dashboard/campaigns/${result.campaignId}`} className="inline-flex items-center gap-2 text-sm font-medium text-amber-700 bg-amber-50 hover:bg-amber-100 px-4 py-2 rounded-xl transition-colors">
-                  Check Campaign Status <ArrowRight className="w-3.5 h-3.5" />
+                  View Full Campaign <ArrowRight className="w-3.5 h-3.5" />
                 </Link>
               )}
             </div>
