@@ -1,14 +1,13 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { UserButton } from '@clerk/nextjs'
 import {
   Zap, LayoutDashboard, FolderOpen, Plus, Palette,
-  
   CreditCard, Users, BarChart2, Settings, ChevronLeft,
-  ChevronRight, Menu, X, HelpCircle, Megaphone
+  ChevronRight, Menu, X, HelpCircle
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -27,10 +26,34 @@ const BOTTOM_ITEMS = [
   { label: 'Help', href: '/help', icon: HelpCircle },
 ]
 
+interface BillingInfo {
+  planTier: string
+  campaignsUsed: number
+  campaignLimit: number | 'unlimited'
+}
+
 export function DashboardSidebar() {
   const [collapsed, setCollapsed] = useState(false)
   const [mobileOpen, setMobileOpen] = useState(false)
+  const [billing, setBilling] = useState<BillingInfo | null>(null)
   const pathname = usePathname()
+
+  useEffect(() => {
+    fetch('/api/billing/info')
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        if (data) setBilling({
+          planTier: data.planTier ?? 'free',
+          campaignsUsed: data.campaignsUsed ?? 0,
+          campaignLimit: data.campaignLimit ?? 3,
+        })
+      })
+      .catch(() => {})
+  }, [pathname]) // refetch on route change so it stays fresh
+
+  const isPaid = billing && !['free'].includes(billing.planTier)
+  const isAtLimit = billing && billing.campaignLimit !== 'unlimited' &&
+    billing.campaignsUsed >= (billing.campaignLimit as number)
 
   const SidebarContent = () => (
     <div className={cn('flex flex-col h-full', collapsed ? 'items-center' : '')}>
@@ -83,18 +106,47 @@ export function DashboardSidebar() {
         })}
       </nav>
 
-      {/* Upgrade banner (if on free) */}
-      {!collapsed && (
-        <div className="mx-3 mb-3 p-4 bg-gradient-to-br from-slate-900 to-slate-800 rounded-xl text-white">
-          <div className="flex items-center gap-2 mb-1.5">
-            <Megaphone className="w-3.5 h-3.5 text-amber-400" />
-            <span className="text-xs font-bold text-amber-400">FREE PLAN</span>
-          </div>
-          <p className="text-xs text-slate-300 mb-3">3/3 free campaigns used. Upgrade for unlimited campaigns + brand kit.</p>
-          <Link href="/dashboard/billing" className="block text-center text-xs font-semibold bg-amber-400 text-slate-900 py-2 rounded-lg hover:bg-amber-300 transition-colors">
-            Upgrade to Pro
-          </Link>
-        </div>
+      {/* Plan banner — only show if not collapsed */}
+      {!collapsed && billing && (
+        <>
+          {/* FREE: show usage + upgrade */}
+          {!isPaid && (
+            <div className="mx-3 mb-3 p-4 bg-gradient-to-br from-slate-900 to-slate-800 rounded-xl text-white">
+              <div className="flex items-center gap-2 mb-1.5">
+                <Zap className="w-3.5 h-3.5 text-amber-400" />
+                <span className="text-xs font-bold text-amber-400">FREE PLAN</span>
+              </div>
+              <p className="text-xs text-slate-300 mb-1">
+                {billing.campaignsUsed}/{billing.campaignLimit} campaigns used this month.
+              </p>
+              {isAtLimit && (
+                <p className="text-xs text-red-400 mb-2">Limit reached — upgrade to continue.</p>
+              )}
+              {/* Usage bar */}
+              <div className="h-1 bg-slate-700 rounded-full mb-3 overflow-hidden">
+                <div
+                  className={cn('h-full rounded-full transition-all', isAtLimit ? 'bg-red-400' : 'bg-amber-400')}
+                  style={{ width: `${Math.min(100, (billing.campaignsUsed / (billing.campaignLimit as number)) * 100)}%` }}
+                />
+              </div>
+              <Link href="/dashboard/billing" className="block text-center text-xs font-semibold bg-amber-400 text-slate-900 py-2 rounded-lg hover:bg-amber-300 transition-colors">
+                Upgrade to Pro
+              </Link>
+            </div>
+          )}
+          {/* PAID: show compact plan badge */}
+          {isPaid && (
+            <div className="mx-3 mb-3 px-4 py-3 bg-amber-50 border border-amber-200 rounded-xl flex items-center gap-2">
+              <Zap className="w-3.5 h-3.5 text-amber-600 flex-shrink-0" />
+              <div>
+                <p className="text-xs font-bold text-amber-800 capitalize">{billing.planTier} Plan</p>
+                <p className="text-xs text-amber-600">
+                  {billing.campaignLimit === 'unlimited' ? 'Unlimited campaigns' : `${billing.campaignsUsed}/${billing.campaignLimit} this month`}
+                </p>
+              </div>
+            </div>
+          )}
+        </>
       )}
 
       {/* Bottom nav */}
@@ -117,10 +169,8 @@ export function DashboardSidebar() {
             </Link>
           )
         })}
-
-        {/* User button */}
         <div className={cn('flex items-center gap-3 px-3 py-2 mt-2', collapsed && 'justify-center')}>
-          <UserButton appearance={{ elements: { avatarBox: 'w-8 h-8' } }} />
+          <UserButton afterSignOutUrl="/" appearance={{ elements: { avatarBox: 'w-8 h-8' } }} />
           {!collapsed && <span className="text-sm text-slate-600">Account</span>}
         </div>
       </div>
@@ -129,7 +179,6 @@ export function DashboardSidebar() {
 
   return (
     <>
-      {/* Desktop sidebar */}
       <aside className={cn(
         'hidden lg:flex flex-col bg-white border-r border-slate-200 transition-all duration-300 flex-shrink-0',
         collapsed ? 'w-16' : 'w-64'
@@ -137,7 +186,6 @@ export function DashboardSidebar() {
         <SidebarContent />
       </aside>
 
-      {/* Mobile menu button */}
       <button
         onClick={() => setMobileOpen(true)}
         className="lg:hidden fixed bottom-4 right-4 z-40 w-12 h-12 bg-slate-900 rounded-full flex items-center justify-center shadow-lg"
@@ -145,7 +193,6 @@ export function DashboardSidebar() {
         <Menu className="w-5 h-5 text-amber-400" />
       </button>
 
-      {/* Mobile drawer */}
       {mobileOpen && (
         <div className="lg:hidden fixed inset-0 z-50 flex">
           <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setMobileOpen(false)} />
