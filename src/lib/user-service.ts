@@ -8,6 +8,7 @@ import { users, organizations, brandKits, subscriptions, campaigns, auditLogs } 
 import { eq, and, desc, count, sql } from 'drizzle-orm'
 import { generateReferralCode, slugify } from './utils'
 import type { PlanTier } from './stripe'
+import { clerkClient } from '@clerk/nextjs/server'
 
 // ── Get or create user from Clerk ────────────────────────────
 
@@ -48,6 +49,7 @@ export async function getOrCreateUser(clerkId: string, data: {
 }
 
 export async function getUserWithDetails(clerkId: string) {
+  await syncPlanFromClerkMetadata(clerkId)
   return db.query.users.findFirst({
     where: eq(users.clerkId, clerkId),
     with: { organization: { with: { subscriptions: true } }, brandKit: true },
@@ -105,6 +107,61 @@ export async function downgradeToFree(orgId: string) {
     .where(eq(subscriptions.orgId, orgId))
 }
 
+// ── Sync plan from Clerk privateMetadata → DB ────────────────
+// This lets you override the plan in Clerk dashboard without needing Stripe.
+// Clerk privateMetadata.planTier takes precedence over DB subscription.
+export async function syncPlanFromClerkMetadata(clerkId: string): Promise<PlanTier | null> {
+  try {
+    const client = await clerkClient()
+    const clerkUser = await client.users.getUser(clerkId)
+    const meta = clerkUser.privateMetadata as Record<string, any>
+    const clerkTier = meta?.planTier as PlanTier | undefined
+    const validTiers: PlanTier[] = ['free', 'starter', 'pro', 'brokerage', 'enterprise']
+
+    if (!clerkTier || !validTiers.includes(clerkTier)) return null
+
+    // Find the user's org and update the DB subscription to match
+    const user = await db.query.users.findFirst({
+      where: eq(users.clerkId, clerkId),
+      with: { organization: true },
+    })
+    if (!user?.orgId) return clerkTier
+
+    const existing = await db.query.subscriptions.findFirst({
+      where: eq(subscriptions.orgId, user.orgId),
+    })
+
+    if (existing) {
+      if (existing.plan !== clerkTier) {
+        await db.update(subscriptions)
+          .set({ plan: clerkTier, status: 'active', updatedAt: new Date() })
+          .where(eq(subscriptions.orgId, user.orgId))
+        await db.update(organizations)
+          .set({ plan: clerkTier, updatedAt: new Date() })
+          .where(eq(organizations.id, user.orgId))
+      }
+    } else {
+      await db.insert(subscriptions).values({
+        orgId: user.orgId,
+        plan: clerkTier,
+        status: 'active',
+        stripeSubscriptionId: `clerk_manual_${clerkId}`,
+        stripePriceId: `clerk_manual_${clerkTier}`,
+        stripeCurrentPeriodEnd: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000),
+        cancelAtPeriodEnd: false,
+      })
+      await db.update(organizations)
+        .set({ plan: clerkTier, updatedAt: new Date() })
+        .where(eq(organizations.id, user.orgId))
+    }
+
+    return clerkTier
+  } catch (err) {
+    console.error('syncPlanFromClerkMetadata error (non-fatal):', err)
+    return null
+  }
+}
+
 export async function upsertBrandKit(userId: string, orgId: string, data: Partial<typeof brandKits.$inferInsert>) {
   const existing = await db.query.brandKits.findFirst({ where: eq(brandKits.userId, userId) })
   if (existing) {
@@ -121,6 +178,9 @@ export async function upsertBrandKit(userId: string, orgId: string, data: Partia
 export async function checkCampaignQuota(clerkId: string): Promise<{
   allowed: boolean; used: number; limit: number | 'unlimited'; planTier: PlanTier; resetsAt?: Date
 }> {
+  // Sync from Clerk metadata first (allows manual plan overrides via Clerk dashboard)
+  await syncPlanFromClerkMetadata(clerkId)
+
   const user = await db.query.users.findFirst({
     where: eq(users.clerkId, clerkId),
     with: { organization: { with: { subscriptions: true } } },
@@ -158,6 +218,7 @@ export async function incrementCampaignUsage(clerkId: string) {
 }
 
 export async function getDashboardStats(clerkId: string) {
+  await syncPlanFromClerkMetadata(clerkId)
   const user = await db.query.users.findFirst({
     where: eq(users.clerkId, clerkId),
     with: { organization: { with: { subscriptions: true } }, brandKit: true },
@@ -248,7 +309,6 @@ export async function getTeamMembers(orgId: string) {
 export async function updateUserProfile(clerkId: string, data: {
   firstName?: string; lastName?: string; phone?: string
   licenseNumber?: string; mlsAgentId?: string; timezone?: string
-  onboardingComplete?: boolean; onboardingStep?: number
   aiPersona?: { tone: 'professional' | 'friendly' | 'luxury' | 'energetic'; writingStyle: string; tagline: string; specialties: string[]; marketArea: string }
 }) {
   const user = await db.query.users.findFirst({ where: eq(users.clerkId, clerkId) })
