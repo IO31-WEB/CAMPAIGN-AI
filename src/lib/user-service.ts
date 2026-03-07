@@ -135,8 +135,10 @@ export async function syncPlanFromClerkMetadata(clerkId: string): Promise<PlanTi
     if (user && !user.orgId) {
       const email = clerkUser.emailAddresses?.[0]?.emailAddress ?? ''
       const name = [clerkUser.firstName, clerkUser.lastName].filter(Boolean).join(' ') || email
+      const slug = `org-${clerkId.replace(/[^a-z0-9]/gi, '').toLowerCase().slice(0, 20)}-${Date.now()}`
       const [newOrg] = await db.insert(organizations).values({
         name: `${name}'s Organization`,
+        slug,
         plan: clerkTier,
       }).returning()
       await db.update(users)
