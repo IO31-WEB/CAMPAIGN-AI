@@ -41,7 +41,7 @@ export default function HomePage() {
         <div className="max-w-5xl mx-auto text-center">
           <div className="inline-flex items-center gap-2 bg-amber-50 border border-amber-200 text-amber-800 text-xs font-medium px-3 py-1.5 rounded-full mb-8 animate-fade-in">
             <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
-            MLS-Connected • Claude AI • ~60s Generation
+            MLS-Connected • Claude AI • ~90s Generation
           </div>
 
           <h1 className="font-display text-5xl sm:text-6xl lg:text-7xl font-semibold text-slate-900 leading-[1.05] mb-6 animate-fade-in animate-stagger-1">
@@ -51,7 +51,7 @@ export default function HomePage() {
           </h1>
 
           <p className="text-lg sm:text-xl text-slate-600 max-w-2xl mx-auto mb-10 leading-relaxed animate-fade-in animate-stagger-2">
-            Enter your MLS listing ID and get a complete 6-week marketing campaign — Facebook posts, Instagram captions, a print-ready flyer, and email copy — all generated in about 60 seconds.
+            Enter your MLS listing ID and get a complete 6-week marketing campaign — Facebook posts, Instagram captions, a print-ready flyer, and email copy — all generated in about 90 seconds.
           </p>
 
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4 animate-fade-in animate-stagger-3">
@@ -74,7 +74,7 @@ export default function HomePage() {
         {/* Stats bar */}
         <div className="max-w-4xl mx-auto mt-20 grid grid-cols-2 sm:grid-cols-4 gap-px bg-slate-200 rounded-2xl overflow-hidden shadow-sm animate-fade-in animate-stagger-5">
           {[
-            { value: '~60s', label: 'Avg. Generation' },
+            { value: '~90s', label: 'Avg. Generation' },
             { value: '6', label: 'Channels Generated' },
             { value: '1,500+', label: 'Agents Using It' },
             { value: '4.9★', label: 'Average Rating' },
