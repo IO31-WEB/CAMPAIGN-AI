@@ -137,16 +137,24 @@ export default function CampaignsPage() {
               <FileText className="w-7 h-7 text-slate-400" />
             </div>
             <h4 className="font-display text-lg font-semibold text-slate-900 mb-2">
-              {search ? 'No matching campaigns' : 'No campaigns yet'}
+              {search
+                ? 'No matching campaigns'
+                : filter === 'generating' ? 'No campaigns generating'
+                : filter === 'failed' ? 'No failed campaigns'
+                : filter === 'complete' ? 'No completed campaigns yet'
+                : 'No campaigns yet'}
             </h4>
             <p className="text-slate-500 text-sm mb-6">
-              {search ? 'Try a different search term.' : 'Generate your first campaign from an MLS listing ID.'}
+              {search
+                ? 'Try a different search term.'
+                : filter === 'generating' ? 'Campaigns in progress will appear here.'
+                : filter === 'failed' ? 'Any generation errors will show up here.'
+                : filter === 'complete' ? 'Your completed campaigns will appear here.'
+                : 'Generate your first campaign from an MLS listing ID.'}
             </p>
-            {!search && (
-              <Link href="/dashboard/generate" className="inline-flex items-center gap-2 bg-slate-900 text-white text-sm font-semibold px-6 py-3 rounded-xl hover:bg-slate-800 transition-colors">
-                <Plus className="w-4 h-4" /> Create First Campaign
-              </Link>
-            )}
+            <Link href="/dashboard/generate" className="inline-flex items-center gap-2 bg-slate-900 text-white text-sm font-semibold px-6 py-3 rounded-xl hover:bg-slate-800 transition-colors">
+              <Plus className="w-4 h-4" /> {filter === 'all' && !search ? 'Create First Campaign' : 'New Campaign'}
+            </Link>
           </div>
         ) : (
           <>
