@@ -191,12 +191,14 @@ export default function CampaignDetailPage() {
       </div>
 
       {/* Property Photos */}
-      {campaign.listing?.photos && (campaign.listing.photos as string[]).length > 0 && (
-        <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
-          <div className="p-4 border-b border-slate-100">
-            <span className="font-display font-semibold text-slate-900">Property Photos</span>
-            <span className="ml-2 text-xs text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full">{(campaign.listing.photos as string[]).length} photos</span>
-          </div>
+      <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
+        <div className="p-4 border-b border-slate-100 flex items-center justify-between">
+          <span className="font-display font-semibold text-slate-900">Property Photos</span>
+          {campaign.listing?.photos && (campaign.listing.photos as string[]).length > 0 && (
+            <span className="text-xs text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full">{(campaign.listing.photos as string[]).length} photos</span>
+          )}
+        </div>
+        {campaign.listing?.photos && (campaign.listing.photos as string[]).length > 0 ? (
           <div className="p-4 grid grid-cols-2 sm:grid-cols-3 gap-3">
             {(campaign.listing.photos as string[]).slice(0, 6).map((photo, i) => (
               <a key={i} href={photo} target="_blank" rel="noopener noreferrer" className="aspect-video rounded-xl overflow-hidden bg-slate-100 block hover:opacity-90 transition-opacity">
@@ -205,8 +207,14 @@ export default function CampaignDetailPage() {
               </a>
             ))}
           </div>
-        </div>
-      )}
+        ) : (
+          <div className="p-8 text-center">
+            <div className="text-4xl mb-3">🏡</div>
+            <p className="text-sm font-semibold text-slate-500 mb-1">No photos available</p>
+            <p className="text-xs text-slate-400">MLS photos will appear here for real listings. Demo listings don&apos;t include photos.</p>
+          </div>
+        )}
+      </div>
 
       {/* Facebook Posts */}
       {campaign.facebookPosts && campaign.facebookPosts.length > 0 && (
@@ -299,25 +307,6 @@ export default function CampaignDetailPage() {
         </Section>
       )}
 
-      {/* Flyer */}
-      <Section title="Print-Ready Flyer" badge="PDF" icon={Printer}>
-        <div className="p-5 flex items-center justify-between gap-4">
-          <div>
-            <p className="text-sm font-semibold text-slate-900 mb-1">Listing Flyer</p>
-            <p className="text-xs text-slate-500">Opens a print-ready page — use your browser&apos;s Print → Save as PDF to download.</p>
-          </div>
-          <a
-            href={`/dashboard/campaigns/${campaign.id}/flyer`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-2 bg-slate-900 text-white text-sm font-semibold px-4 py-2 rounded-xl hover:bg-slate-800 transition-colors flex-shrink-0"
-          >
-            <Download className="w-4 h-4" />
-            Generate Flyer
-          </a>
-        </div>
-      </Section>
-
       {/* Video & Reel Scripts */}
       {campaign.videoScript && (() => {
         let reels: ReelScript[] = []
@@ -384,6 +373,25 @@ export default function CampaignDetailPage() {
           </Section>
         )
       })()}
+
+      {/* Flyer */}
+      <Section title="Print-Ready Flyer" badge="PDF" icon={Printer}>
+        <div className="p-5 flex items-center justify-between gap-4">
+          <div>
+            <p className="text-sm font-semibold text-slate-900 mb-1">Listing Flyer</p>
+            <p className="text-xs text-slate-500">Opens a print-ready page — use your browser&apos;s Print → Save as PDF to download.</p>
+          </div>
+          <a
+            href={`/dashboard/campaigns/${campaign.id}/flyer`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-2 bg-slate-900 text-white text-sm font-semibold px-4 py-2 rounded-xl hover:bg-slate-800 transition-colors flex-shrink-0"
+          >
+            <Download className="w-4 h-4" />
+            Generate Flyer
+          </a>
+        </div>
+      </Section>
     </div>
   )
 }
