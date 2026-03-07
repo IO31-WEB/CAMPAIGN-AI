@@ -324,6 +324,11 @@ export async function POST(request: NextRequest) {
       campaignId: campaignRecord?.id,
       isDemo,
       planTier,
+      brandKit: brandKit ? {
+        logoUrl: brandKit.logoUrl ?? '',
+        brokerageLogo: (brandKit as any).brokerageLogo ?? '',
+        agentPhotoUrl: brandKit.agentPhotoUrl ?? '',
+      } : null,
       listing: {
         address,
         price: mlsData.listPrice ? `$${mlsData.listPrice.toLocaleString()}` : 'Price on request',
