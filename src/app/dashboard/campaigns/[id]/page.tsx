@@ -106,12 +106,12 @@ export default function CampaignDetailPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ publish: !campaign.micrositePublished }),
       })
-      if (!res.ok) throw new Error('Failed')
       const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Failed to update microsite')
       setCampaign(prev => prev ? { ...prev, micrositePublished: data.published } : prev)
       toast.success(data.published ? 'Microsite published!' : 'Microsite unpublished')
-    } catch {
-      toast.error('Failed to update microsite')
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to update microsite')
     } finally {
       setPublishing(false)
     }
@@ -179,6 +179,24 @@ export default function CampaignDetailPage() {
           </div>
         </div>
       </div>
+
+      {/* Property Photos */}
+      {campaign.listing?.photos && (campaign.listing.photos as string[]).length > 0 && (
+        <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
+          <div className="p-4 border-b border-slate-100">
+            <span className="font-display font-semibold text-slate-900">Property Photos</span>
+            <span className="ml-2 text-xs text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full">{(campaign.listing.photos as string[]).length} photos</span>
+          </div>
+          <div className="p-4 grid grid-cols-2 sm:grid-cols-3 gap-3">
+            {(campaign.listing.photos as string[]).slice(0, 6).map((photo, i) => (
+              <a key={i} href={photo} target="_blank" rel="noopener noreferrer" className="aspect-video rounded-xl overflow-hidden bg-slate-100 block hover:opacity-90 transition-opacity">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={photo} alt={`Property photo ${i + 1}`} className="w-full h-full object-cover" />
+              </a>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Facebook Posts */}
       {campaign.facebookPosts && campaign.facebookPosts.length > 0 && (
@@ -272,23 +290,23 @@ export default function CampaignDetailPage() {
       )}
 
       {/* Flyer */}
-      {campaign.flyerUrl && (
-        <Section title="Print-Ready Flyer" badge="PDF" icon={Printer}>
-          <div className="p-5 flex items-center justify-between gap-4">
-            <p className="text-sm text-slate-600">Your print-ready listing flyer is ready to download or print.</p>
-            <a
-              href={campaign.flyerUrl}
-              download
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-2 bg-slate-900 text-white text-sm font-semibold px-4 py-2 rounded-xl hover:bg-slate-800 transition-colors flex-shrink-0"
-            >
-              <Download className="w-4 h-4" />
-              Download PDF
-            </a>
+      <Section title="Print-Ready Flyer" badge="PDF" icon={Printer}>
+        <div className="p-5 flex items-center justify-between gap-4">
+          <div>
+            <p className="text-sm font-semibold text-slate-900 mb-1">Listing Flyer</p>
+            <p className="text-xs text-slate-500">Opens a print-ready page — use your browser&apos;s Print → Save as PDF to download.</p>
           </div>
-        </Section>
-      )}
+          <a
+            href={`/dashboard/campaigns/${campaign.id}/flyer`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-2 bg-slate-900 text-white text-sm font-semibold px-4 py-2 rounded-xl hover:bg-slate-800 transition-colors flex-shrink-0"
+          >
+            <Download className="w-4 h-4" />
+            Generate Flyer
+          </a>
+        </div>
+      </Section>
 
       {/* Video Script */}
       {campaign.videoScript && (
