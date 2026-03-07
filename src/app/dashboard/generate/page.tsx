@@ -21,6 +21,7 @@ interface CampaignResult {
   campaignId?: string
   isDemo?: boolean
   planTier?: string
+  brandKit?: { logoUrl?: string; brokerageLogo?: string; agentPhotoUrl?: string } | null
   listing: { address: string; price: string; beds: number; baths: number; sqft: number; photos?: string[]; description?: string }
   facebook: Array<{ week: number; theme: string; copy: string; hashtags?: string[] }>
   instagram: Array<{ week: number; caption: string; hashtags: string[] }>
@@ -253,7 +254,18 @@ export default function GeneratePage() {
           </div>
 
           {/* Listing summary */}
-          <div className="bg-white rounded-xl border border-slate-200 p-5 flex flex-wrap gap-6">
+          <div className="bg-white rounded-xl border border-slate-200 p-5 flex flex-wrap gap-6 items-start">
+            {/* Logos */}
+            {(result.brandKit?.logoUrl || result.brandKit?.brokerageLogo) && (
+              <div className="w-full flex items-center gap-3 pb-4 border-b border-slate-100 mb-1">
+                {result.brandKit?.logoUrl && (
+                  <img src={result.brandKit.logoUrl} alt="Agent Logo" className="h-8 max-w-[100px] object-contain" />
+                )}
+                {result.brandKit?.brokerageLogo && (
+                  <img src={result.brandKit.brokerageLogo} alt="Brokerage Logo" className="h-7 max-w-[90px] object-contain opacity-80" />
+                )}
+              </div>
+            )}
             <div>
               <p className="text-xs text-slate-500 uppercase tracking-wider font-semibold mb-0.5">Address</p>
               <p className="font-semibold text-slate-900">{result.listing.address}</p>
