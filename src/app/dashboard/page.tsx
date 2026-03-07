@@ -12,7 +12,20 @@ export default async function DashboardPage() {
   if (!userId) redirect('/sign-in')
 
   const stats = await getDashboardStats(userId)
-  if (!stats) redirect('/onboarding')
+  if (!stats) {
+  const { getOrCreateUser, getDashboardStats: refetch } = await import('@/lib/user-service')
+  const { currentUser } = await import('@clerk/nextjs/server')
+  const clerkUser = await currentUser()
+  if (clerkUser) {
+    await getOrCreateUser(userId, {
+      email: clerkUser.emailAddresses[0]?.emailAddress ?? '',
+      firstName: clerkUser.firstName ?? undefined,
+      lastName: clerkUser.lastName ?? undefined,
+      avatarUrl: clerkUser.imageUrl ?? undefined,
+    })
+  }
+  redirect('/dashboard')
+}
 
   const { planTier, totalCampaigns, campaignsThisMonth, campaignLimit, recentCampaigns,
           avgGenTimeMs, micrositeViews, daysUntilReset, hasBrandKit, subscription } = stats
