@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { auth, currentUser } from '@clerk/nextjs/server'
 import { stripe, PLANS } from '@/lib/stripe'
 import { absoluteUrl } from '@/lib/utils'
-import { getUserWithDetails } from '@/lib/user-service'
+import { getUserWithDetails, getOrCreateUser } from '@/lib/user-service'
 import { db } from '@/lib/db'
 import { organizations } from '@/lib/db/schema'
 import { eq } from 'drizzle-orm'
@@ -22,10 +22,28 @@ export async function POST(request: NextRequest) {
     const { planId, billing } = RequestSchema.parse(body)
 
     const clerkUser = await currentUser()
-    const dbUser = await getUserWithDetails(userId)
+    if (!clerkUser) return NextResponse.json({ error: 'User not found' }, { status: 401 })
+
+    // Get or auto-create the user in DB (handles users who signed up before webhook was configured)
+    let dbUser = await getUserWithDetails(userId)
+    if (!dbUser) {
+      const primaryEmail = clerkUser.emailAddresses.find(
+        e => e.id === clerkUser.primaryEmailAddressId
+      )?.emailAddress ?? clerkUser.emailAddresses[0]?.emailAddress
+
+      if (!primaryEmail) return NextResponse.json({ error: 'No email found' }, { status: 400 })
+
+      await getOrCreateUser(userId, {
+        email: primaryEmail,
+        firstName: clerkUser.firstName ?? undefined,
+        lastName: clerkUser.lastName ?? undefined,
+        avatarUrl: clerkUser.imageUrl ?? undefined,
+      })
+      dbUser = await getUserWithDetails(userId)
+    }
 
     if (!dbUser?.organization) {
-      return NextResponse.json({ error: 'Organization not found' }, { status: 400 })
+      return NextResponse.json({ error: 'Could not create organization. Please contact support.' }, { status: 400 })
     }
 
     const plan = PLANS.find(p => p.id === planId)
@@ -45,12 +63,9 @@ export async function POST(request: NextRequest) {
     // Create Stripe customer if doesn't exist
     if (!customerId) {
       const customer = await stripe.customers.create({
-        email: clerkUser?.emailAddresses[0]?.emailAddress || dbUser.email,
+        email: clerkUser.emailAddresses[0]?.emailAddress ?? dbUser.email,
         name: `${dbUser.firstName ?? ''} ${dbUser.lastName ?? ''}`.trim() || dbUser.email,
-        metadata: {
-          orgId: org.id,
-          clerkUserId: userId,
-        },
+        metadata: { orgId: org.id, clerkUserId: userId },
       })
       customerId = customer.id
 
@@ -65,19 +80,10 @@ export async function POST(request: NextRequest) {
       line_items: [{ price: priceId, quantity: 1 }],
       success_url: absoluteUrl('/dashboard/billing?success=true'),
       cancel_url: absoluteUrl('/dashboard/billing?canceled=true'),
-      metadata: {
-        orgId: org.id,
-        clerkUserId: userId,
-        planId,
-        billing,
-      },
+      metadata: { orgId: org.id, clerkUserId: userId, planId, billing },
       subscription_data: {
         trial_period_days: planId === 'brokerage' ? 14 : 0,
-        metadata: {
-          orgId: org.id,
-          clerkUserId: userId,
-          planId,
-        },
+        metadata: { orgId: org.id, clerkUserId: userId, planId },
       },
       allow_promotion_codes: true,
       billing_address_collection: 'auto',
