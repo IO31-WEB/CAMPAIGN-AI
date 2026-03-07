@@ -1,4 +1,5 @@
 import { auth } from '@clerk/nextjs/server'
+import { PrintButton } from './print-button'
 import { redirect } from 'next/navigation'
 import { getCampaign } from '@/lib/user-service'
 
@@ -33,18 +34,7 @@ export default async function FlyerPage({ params }: { params: Promise<{ id: stri
         body { margin: 0; font-family: Georgia, serif; background: white; }
       `}</style>
 
-      {/* Print button - hidden on print */}
-      <div className="no-print fixed top-4 right-4 z-50 flex gap-3">
-        <button
-          onClick={() => window.print()}
-          className="bg-slate-900 text-white text-sm font-semibold px-4 py-2 rounded-lg hover:bg-slate-800 transition-colors"
-        >
-          🖨️ Print / Save PDF
-        </button>
-        <a href={`/dashboard/campaigns/${id}`} className="bg-white border border-slate-200 text-slate-700 text-sm font-semibold px-4 py-2 rounded-lg hover:bg-slate-50 transition-colors">
-          ← Back
-        </a>
-      </div>
+      <PrintButton backUrl={`/dashboard/campaigns/${id}`} />
 
       {/* Flyer — letter size 8.5×11 */}
       <div style={{ width: '8.5in', minHeight: '11in', margin: '0 auto', background: 'white', display: 'flex', flexDirection: 'column' }}>
