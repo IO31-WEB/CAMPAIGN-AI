@@ -120,7 +120,7 @@ export async function POST(request: NextRequest) {
           stripePriceId: priceId,
           plan,
           status: sub.status as any,
-          currentPeriodEnd: new Date(sub.current_period_end * 1000),
+          currentPeriodEnd: sub.current_period_end ? new Date(sub.current_period_end * 1000) : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
           cancelAtPeriodEnd: sub.cancel_at_period_end,
         })
 
