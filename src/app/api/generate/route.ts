@@ -302,6 +302,8 @@ export async function POST(request: NextRequest) {
         beds: mlsData.property?.bedrooms ?? 0,
         baths: mlsData.property?.bathsFull ?? 0,
         sqft: mlsData.property?.area ?? 0,
+        photos: mlsData.photos ?? [],
+        description: mlsData.remarks ?? '',
       },
       facebook: campaignContent.facebook,
       instagram: campaignContent.instagram,
