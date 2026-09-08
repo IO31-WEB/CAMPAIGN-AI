@@ -145,7 +145,7 @@ export async function parsePropertyReportPdf(
   filename: string
 ): Promise<ParsedPropertyReport> {
   const response = await anthropic.beta.messages.create({
-    model: 'claude-sonnet-4-5',
+    model: 'claude-sonnet-5',
     max_tokens: 4096,
     betas: ['pdfs-2024-09-25'],
     system: SYSTEM_PROMPT,
