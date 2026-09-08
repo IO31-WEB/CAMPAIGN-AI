@@ -143,7 +143,7 @@ export default function OnboardingClient() {
             <div className="space-y-3">
               {[
                 'Your AI writing persona is set',
-                'MLS connection ready via SimplyRETS',
+                'MLS connection ready via Repliers',
                 '3 free campaigns included — no card needed',
                 'Upgrade anytime for unlimited campaigns',
               ].map((item) => (
