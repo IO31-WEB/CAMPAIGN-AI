@@ -172,7 +172,7 @@ export async function POST(request: NextRequest) {
       trafficCounts: parsed?.trafficCounts ?? null,
       housingData: parsed?.housingData ?? null,
       nearbyRetailers: mergedRetailers.length > 0 ? mergedRetailers as any : null,
-      parseModel: 'claude-sonnet-4-5',
+      parseModel: 'claude-sonnet-5',
       parseTokensUsed: parsed?.tokensUsed ?? null,
       parseCompletedAt: parseError ? null : new Date(),
       parseError,
