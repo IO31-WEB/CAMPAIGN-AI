@@ -265,7 +265,7 @@ export default function PricingPage() {
               {[
                 {
                   q: 'Does ListOps work with my MLS?',
-                  a: 'We connect via SimplyRETS which covers 500+ MLS boards across the US. If your board isn\'t supported, contact us — we add new boards regularly. The app also works with demo data out of the box so you can try it before connecting your MLS.',
+                  a: 'We connect via Repliers, which handles MLS licensing and connects to boards across the US. If your board isn\'t yet supported, contact us — we work with Repliers to add new boards. The app also works with demo data out of the box so you can try it before connecting your MLS.',
                 },
                 {
                   q: 'What exactly does each campaign include?',
