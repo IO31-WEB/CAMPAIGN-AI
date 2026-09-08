@@ -697,16 +697,29 @@ export async function POST(request: NextRequest) {
     // video/expanded-social call. Splitting social from listing content roughly halves the
     // expected output size of each call versus the old combined prompt, giving real headroom
     // under max_tokens instead of just raising the ceiling and hoping.
+    //
+    // FIX: "Return ONLY valid JSON" in the prompt text is a request, not a guarantee — the
+    // model can still preface its answer with a stray sentence, or wrap it in something the
+    // regex fallback can't recover. Prefilling the assistant turn with "{" forces the response
+    // to start as JSON with no room for a preamble. The API only returns the *continuation*
+    // after the prefill, so we prepend "{" back on before parsing.
+    const JSON_PREFILL = '{'
     const [socialMessage, listingMessage, proMessage] = await Promise.all([
       anthropic.messages.create({
         model: 'claude-sonnet-5',
         max_tokens: 10000,
-        messages: [{ role: 'user', content: socialPromptText }],
+        messages: [
+          { role: 'user', content: socialPromptText },
+          { role: 'assistant', content: JSON_PREFILL },
+        ],
       }),
       anthropic.messages.create({
         model: 'claude-sonnet-5',
         max_tokens: 10000,
-        messages: [{ role: 'user', content: listingMessageContent }],
+        messages: [
+          { role: 'user', content: listingMessageContent },
+          { role: 'assistant', content: JSON_PREFILL },
+        ],
       }),
       isProPlan
         ? anthropic.messages.create({
@@ -714,7 +727,10 @@ export async function POST(request: NextRequest) {
             // Pro output (6 weeks × TikTok/LinkedIn/X/Stories/Reels + virtual tours) is the
             // largest single payload — keep its own generous budget.
             max_tokens: 16000,
-            messages: [{ role: 'user', content: [{ type: 'text', text: buildProPrompt(mlsData, planTier, brandKit, (user as any).aiPersona) }] }],
+            messages: [
+              { role: 'user', content: [{ type: 'text', text: buildProPrompt(mlsData, planTier, brandKit, (user as any).aiPersona) }] },
+              { role: 'assistant', content: JSON_PREFILL },
+            ],
           })
         : Promise.resolve(null),
     ])
@@ -730,14 +746,21 @@ export async function POST(request: NextRequest) {
     assertNotTruncated(listingMessage, 'Listing/print/photo')
     if (proMessage) assertNotTruncated(proMessage, 'Pro video/social')
 
+    // FIX: on parse failure, log a snippet of the actual raw text so Vercel logs show *why*
+    // it failed (stray preamble, unescaped newline, etc.) instead of just the fact that it did.
     function parseJSON(raw: string, label: string) {
-      const cleaned = raw.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim()
+      // Prefill isn't echoed back by the API — add it back before cleaning/parsing.
+      const withPrefill = JSON_PREFILL + raw
+      const cleaned = withPrefill.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim()
       try { return JSON.parse(cleaned) }
       catch {
         const m = cleaned.match(/\{[\s\S]*\}/)
         if (m) {
           try { return JSON.parse(m[0]) } catch { /* fall through to throw below */ }
         }
+        console.error(
+          `[generate] ${label} JSON parse failed. Head: ${cleaned.slice(0, 300)} ... Tail: ${cleaned.slice(-300)}`
+        )
         throw new Error(`${label} response could not be parsed. Please try again.`)
       }
     }
@@ -874,4 +897,3 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: err.message || 'Campaign generation failed. Please try again.' }, { status: 500 })
   }
 }
-
