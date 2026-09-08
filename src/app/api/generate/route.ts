@@ -698,28 +698,22 @@ export async function POST(request: NextRequest) {
     // expected output size of each call versus the old combined prompt, giving real headroom
     // under max_tokens instead of just raising the ceiling and hoping.
     //
-    // FIX: "Return ONLY valid JSON" in the prompt text is a request, not a guarantee — the
-    // model can still preface its answer with a stray sentence, or wrap it in something the
-    // regex fallback can't recover. Prefilling the assistant turn with "{" forces the response
-    // to start as JSON with no room for a preamble. The API only returns the *continuation*
-    // after the prefill, so we prepend "{" back on before parsing.
-    const JSON_PREFILL = '{'
+    // NOTE: assistant-message prefill (seeding the reply with "{") is NOT supported on this
+    // model — the API returns a 400 ("This model does not support assistant message prefill")
+    // if you try. So JSON-only compliance has to come entirely from prompt instructions +
+    // the parser being resilient, not from constraining the response mechanically.
     const [socialMessage, listingMessage, proMessage] = await Promise.all([
       anthropic.messages.create({
         model: 'claude-sonnet-5',
         max_tokens: 10000,
-        messages: [
-          { role: 'user', content: socialPromptText },
-          { role: 'assistant', content: JSON_PREFILL },
-        ],
+        system: 'Respond with valid JSON only. Your entire reply must start with "{" and end with "}" — no preamble, no markdown code fences, no closing remarks.',
+        messages: [{ role: 'user', content: socialPromptText }],
       }),
       anthropic.messages.create({
         model: 'claude-sonnet-5',
         max_tokens: 10000,
-        messages: [
-          { role: 'user', content: listingMessageContent },
-          { role: 'assistant', content: JSON_PREFILL },
-        ],
+        system: 'Respond with valid JSON only. Your entire reply must start with "{" and end with "}" — no preamble, no markdown code fences, no closing remarks.',
+        messages: [{ role: 'user', content: listingMessageContent }],
       }),
       isProPlan
         ? anthropic.messages.create({
@@ -727,10 +721,8 @@ export async function POST(request: NextRequest) {
             // Pro output (6 weeks × TikTok/LinkedIn/X/Stories/Reels + virtual tours) is the
             // largest single payload — keep its own generous budget.
             max_tokens: 16000,
-            messages: [
-              { role: 'user', content: [{ type: 'text', text: buildProPrompt(mlsData, planTier, brandKit, (user as any).aiPersona) }] },
-              { role: 'assistant', content: JSON_PREFILL },
-            ],
+            system: 'Respond with valid JSON only. Your entire reply must start with "{" and end with "}" — no preamble, no markdown code fences, no closing remarks.',
+            messages: [{ role: 'user', content: [{ type: 'text', text: buildProPrompt(mlsData, planTier, brandKit, (user as any).aiPersona) }] }],
           })
         : Promise.resolve(null),
     ])
@@ -749,9 +741,7 @@ export async function POST(request: NextRequest) {
     // FIX: on parse failure, log a snippet of the actual raw text so Vercel logs show *why*
     // it failed (stray preamble, unescaped newline, etc.) instead of just the fact that it did.
     function parseJSON(raw: string, label: string) {
-      // Prefill isn't echoed back by the API — add it back before cleaning/parsing.
-      const withPrefill = JSON_PREFILL + raw
-      const cleaned = withPrefill.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim()
+      const cleaned = raw.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim()
       try { return JSON.parse(cleaned) }
       catch {
         const m = cleaned.match(/\{[\s\S]*\}/)
