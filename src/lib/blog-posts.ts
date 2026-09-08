@@ -380,7 +380,7 @@ export const BLOG_POSTS: BlogPost[] = [
         stats: [
           { value: '6 hrs', label: 'Average time per listing saved with AI-assisted marketing' },
           { value: '90 sec', label: 'Time to generate a complete campaign with ListOps' },
-          { value: '500+', label: 'MLS boards supported via SimplyRETS integration' },
+          { value: 'Multi-market', label: 'MLS boards supported via Repliers integration' },
           { value: '3.2×', label: 'Higher engagement for AI-assisted vs. DIY social content' },
         ],
       },
@@ -820,7 +820,7 @@ export const BLOG_POSTS: BlogPost[] = [
       },
       {
         type: 'p',
-        content: 'The only purpose-built AI tool that generates a complete listing campaign from your MLS ID. Facebook posts, Instagram captions, email sequences, print materials, microsite copy, video scripts, and TikTok content — all in about 90 seconds. Connects directly to SimplyRETS (500+ MLS boards). Plans start free.',
+        content: 'The only purpose-built AI tool that generates a complete listing campaign from your MLS ID. Facebook posts, Instagram captions, email sequences, print materials, microsite copy, video scripts, and TikTok content — all in about 90 seconds. Connects directly to Repliers MLS data. Plans start free.',
       },
       {
         type: 'h3',
