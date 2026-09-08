@@ -102,7 +102,7 @@ export default function HomePage() {
               {
                 num: '01',
                 title: 'Paste Your MLS ID',
-                desc: 'We connect directly to your MLS board via SimplyRETS and pull your listing data, photos, specs, and agent details automatically. No manual entry required.',
+                desc: 'We connect directly to your MLS board via Repliers and pull your listing data, photos, specs, and agent details automatically. No manual entry required.',
                 icon: '🔗',
               },
               {
@@ -328,7 +328,7 @@ export default function HomePage() {
           </div>
           <div className="border-t border-slate-800 pt-8 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs">
             <p>© {new Date().getFullYear()} ListOps. All rights reserved.</p>
-            <p>Powered by Claude AI + SimplyRETS MLS</p>
+            <p>Powered by Claude AI + Repliers MLS</p>
           </div>
         </div>
       </footer>
