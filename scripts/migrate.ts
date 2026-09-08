@@ -105,7 +105,7 @@ async function migrate() {
     CREATE TABLE IF NOT EXISTS "listings" (
       "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
       "mls_id" text NOT NULL,
-      "mls_board" text NOT NULL DEFAULT 'simplyrets',
+      "mls_board" text NOT NULL DEFAULT 'repliers',
       "agent_id" uuid NOT NULL REFERENCES "users"("id"),
       "org_id" uuid REFERENCES "organizations"("id"),
       "address" text,
