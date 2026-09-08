@@ -670,7 +670,7 @@ export async function POST(request: NextRequest) {
     // This cuts generation time from ~2-3 min down to ~45-60s.
     const [message, proMessage] = await Promise.all([
       anthropic.messages.create({
-        model: 'claude-sonnet-4-20250514',
+        model: 'claude-sonnet-5',
         // FIX: 6000 was too low — a full 6-week Facebook+Instagram calendar + email + print
         // easily hits 7-9k tokens. Truncated output = malformed JSON = the error users see.
         // 16000 gives headroom for all core modules without truncation.
@@ -679,7 +679,7 @@ export async function POST(request: NextRequest) {
       }),
       isProPlan
         ? anthropic.messages.create({
-            model: 'claude-sonnet-4-20250514',
+            model: 'claude-sonnet-5',
             // FIX: 8000 was too low for 6 weeks × (TikTok + LinkedIn + X + Stories + Reels).
             // Pro output is ~12-14k tokens. 16000 gives safe headroom.
             max_tokens: 16000,
