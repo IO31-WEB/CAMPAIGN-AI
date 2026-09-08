@@ -285,7 +285,7 @@ export default function GeneratePage() {
                 className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-amber-400 focus:border-transparent disabled:opacity-50"
               />
               <p className="text-xs text-slate-500 mt-2">
-                Connected via SimplyRETS MLS API · Supports 500+ MLS boards nationwide
+                Connected via Repliers MLS API
               </p>
             </div>
           )}
