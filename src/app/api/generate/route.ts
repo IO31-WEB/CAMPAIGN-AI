@@ -69,45 +69,89 @@ function getDemoListing(mlsId: string) {
   }
 }
 
-// ── Fetch listing from SimplyRETS ──────────────────────────────
+// ── Fetch listing from Repliers ────────────────────────────────
+// Repliers image paths are relative to their CDN — prefix to get a usable URL.
+// https://help.repliers.com/en/article/listing-images-implementation-guide-198p8u8
+function repliersImageUrl(path: string): string {
+  return `https://cdn.repliers.io/${path}`
+}
+
+// Normalizes a Repliers /listings/{mlsNumber} response into the internal listing
+// shape the rest of this pipeline expects (address/property/agent/photos).
+function normalizeRepliersListing(raw: any, mlsId: string) {
+  const addr = raw.address ?? {}
+  const details = raw.details ?? {}
+  const agent = Array.isArray(raw.agents) && raw.agents.length > 0 ? raw.agents[0] : {}
+  const [agentFirstName, ...agentLastRest] = String(agent.name ?? '').split(' ')
+
+  const streetParts = [addr.streetNumber, addr.streetName, addr.streetSuffix]
+    .filter(Boolean).join(' ')
+  const deliveryLine = addr.unitNumber ? `${addr.unitNumber}-${streetParts}` : streetParts
+
+  return {
+    mlsId: raw.mlsNumber ?? mlsId,
+    listPrice: Number(raw.listPrice) || 0,
+    remarks: details.description ?? '',
+    address: {
+      deliveryLine,
+      line1: deliveryLine,
+      city: addr.city ?? '',
+      state: addr.state ?? '',
+      postalCode: addr.zip ?? '',
+    },
+    property: {
+      bedrooms: details.numBedrooms ?? 0,
+      bathsFull: details.numBathrooms ?? 0,
+      area: Number(details.sqft) || 0,
+      yearBuilt: details.yearBuilt ? Number(details.yearBuilt) : null,
+      type: details.propertyType ?? 'Residential',
+      features: [details.extras, details.flooringType, details.exteriorConstruction1].filter(Boolean),
+    },
+    agent: {
+      firstName: agentFirstName ?? '',
+      lastName: agentLastRest.join(' ') ?? '',
+      contact: { office: (Array.isArray(agent.phones) && agent.phones[0]) ?? '' },
+    },
+    photos: (raw.images ?? []).map(repliersImageUrl),
+  }
+}
+
 async function fetchMLSListing(mlsId: string): Promise<{
   data: any
   isDemo: boolean
   fetchError?: string
 }> {
-  const apiKey = process.env.SIMPLYRETS_API_KEY
-  const apiSecret = process.env.SIMPLYRETS_API_SECRET
-  const credentials = apiKey && apiSecret
-    ? Buffer.from(`${apiKey}:${apiSecret}`).toString('base64')
-    : Buffer.from('simplyrets:simplyrets').toString('base64')
-  const isRealCredentials = !!(apiKey && apiSecret)
+  const apiKey = process.env.REPLIERS_API_KEY
+
+  // No credentials configured — use local demo data so the app works out of the box
+  // without a Repliers account. (Unlike SimplyRETS, Repliers has no public shared
+  // demo credentials — sandbox access still requires a free account + API key.)
+  if (!apiKey) {
+    return { data: getDemoListing(mlsId), isDemo: true }
+  }
 
   try {
-    const res = await fetch(`https://api.simplyrets.com/properties/${mlsId}`, {
-      headers: { Authorization: `Basic ${credentials}`, Accept: 'application/json' },
-      signal: AbortSignal.timeout(8000),
-    })
-    if (!res.ok) {
-      // FIX: Only fall back to demo data when using SimplyRETS test credentials.
-      // With real credentials, a non-OK response means the listing genuinely wasn't found
-      // or the API is down — surface the error rather than silently generate fake content.
-      if (!isRealCredentials) {
-        return { data: getDemoListing(mlsId), isDemo: true }
+    // status=A&status=U so we still find the listing if it's since gone
+    // Pending/Sold/Unavailable — Repliers defaults to Active-only otherwise.
+    const res = await fetch(
+      `https://api.repliers.io/listings/${encodeURIComponent(mlsId)}?status=A&status=U`,
+      {
+        headers: { 'REPLIERS-API-KEY': apiKey, Accept: 'application/json' },
+        signal: AbortSignal.timeout(8000),
       }
+    )
+    if (!res.ok) {
       const status = res.status
       if (status === 404) {
         throw new Error(`MLS listing "${mlsId}" not found. Check the ID and try again.`)
       }
       throw new Error(`MLS API returned ${status}. Please try again in a moment.`)
     }
-    return { data: await res.json(), isDemo: false }
+    const raw = await res.json()
+    return { data: normalizeRepliersListing(raw, mlsId), isDemo: false }
   } catch (err: any) {
     // Re-throw explicit errors we threw above
     if (err?.message?.includes('not found') || err?.message?.includes('MLS API returned')) throw err
-    // Network/timeout errors — only silently use demo if on test credentials
-    if (!isRealCredentials) {
-      return { data: getDemoListing(mlsId), isDemo: true, fetchError: err?.message }
-    }
     throw new Error(`Could not reach MLS service. Please try again in a moment.`)
   }
 }
@@ -560,7 +604,7 @@ export async function POST(request: NextRequest) {
     let isDemo = false
 
     if (isManualMode && manualListing) {
-      // Build a synthetic listing object matching the SimplyRETS shape
+      // Build a synthetic listing object matching the normalized Repliers shape
       // so the rest of the pipeline works unchanged
       mlsData = {
         mlsId: mlsId.replace('manual:', '').slice(0, 50),
