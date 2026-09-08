@@ -177,7 +177,7 @@ export const subscriptions = pgTable('subscriptions', {
 export const listings = pgTable('listings', {
   id: uuid('id').primaryKey().defaultRandom(),
   mlsId: text('mls_id').notNull(),
-  mlsBoard: text('mls_board').notNull().default('simplyrets'),
+  mlsBoard: text('mls_board').notNull().default('repliers'),
   agentId: uuid('agent_id').notNull().references(() => users.id),
   orgId: uuid('org_id').references(() => organizations.id),
 
