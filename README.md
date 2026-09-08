@@ -7,7 +7,7 @@
 
 ## What ListOps Does
 
-Paste a MLS listing ID. ListOps connects to SimplyRETS (500+ boards), pulls your listing data and photos, passes everything to Claude AI with computer vision, and generates a complete multi-channel marketing campaign in under 2 minutes.
+Paste a MLS listing ID. ListOps connects to Repliers, pulls your listing data and photos, passes everything to Claude AI with computer vision, and generates a complete multi-channel marketing campaign in under 2 minutes.
 
 **Every campaign produces:**
 
@@ -65,7 +65,7 @@ Paste a MLS listing ID. ListOps connects to SimplyRETS (500+ boards), pulls your
 | Auth | Clerk v6 |
 | AI | Anthropic Claude (claude-sonnet-4) with Vision |
 | Payments | Stripe (subscriptions + customer portal) |
-| MLS Data | SimplyRETS (500+ boards) |
+| MLS Data | Repliers |
 | File Storage | Cloudflare R2 |
 | Email | Resend |
 | Analytics | PostHog |
@@ -164,14 +164,14 @@ cp .env.example .env.local
 
 4. **Enable Customer Portal** → Dashboard → Customer Portal → Activate
 
-### 6 — SimplyRETS (MLS Data)
+### 6 — Repliers (MLS Data)
 
-1. [simplyrets.com](https://simplyrets.com) → Sign up → request board access
+1. [repliers.com](https://repliers.com) → Create a free account → sandbox access is available immediately
+2. Submit your production upgrade request with your licensing details (sponsoring agent/brokerage info + target MLS board) — Repliers' onboarding team handles the MLS licensing application for you
    ```
-   SIMPLYRETS_API_KEY=xxx
-   SIMPLYRETS_API_SECRET=xxx
+   REPLIERS_API_KEY=xxx
    ```
-   > **Note:** The app auto-falls back to demo listing data if credentials are missing or the fetch fails — fully functional for development without MLS credentials.
+   > **Note:** The app auto-falls back to demo listing data if `REPLIERS_API_KEY` isn't set — fully functional for development without MLS credentials. Once real credentials are set, a failed lookup surfaces a genuine error instead of silently falling back to demo data.
 
 ### 7 — Cloudflare R2 (File Storage)
 
@@ -390,8 +390,7 @@ STRIPE_BROKERAGE_MONTHLY_PRICE_ID
 STRIPE_BROKERAGE_YEARLY_PRICE_ID
 
 # MLS
-SIMPLYRETS_API_KEY
-SIMPLYRETS_API_SECRET
+REPLIERS_API_KEY
 
 # Storage
 R2_ACCOUNT_ID
