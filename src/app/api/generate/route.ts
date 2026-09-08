@@ -740,19 +740,55 @@ export async function POST(request: NextRequest) {
 
     // FIX: on parse failure, log a snippet of the actual raw text so Vercel logs show *why*
     // it failed (stray preamble, unescaped newline, etc.) instead of just the fact that it did.
+    //
+    // FIX: the most common way an otherwise-well-formed JSON response fails to parse is a
+    // raw, unescaped newline/tab/CR inside a string value — e.g. the model writes a
+    // multi-sentence description as literal line breaks instead of "\n". That's invalid JSON
+    // per spec, and neither JSON.parse nor the brace-matching regex can recover from it.
+    // sanitizeControlCharsInStrings walks the text tracking whether we're inside a quoted
+    // string (respecting \" escapes) and escapes any raw control characters it finds there.
+    function sanitizeControlCharsInStrings(text: string): string {
+      let result = ''
+      let inString = false
+      let escaped = false
+      for (let i = 0; i < text.length; i++) {
+        const ch = text[i]
+        if (inString) {
+          if (escaped) { result += ch; escaped = false; continue }
+          if (ch === '\\') { result += ch; escaped = true; continue }
+          if (ch === '"') { inString = false; result += ch; continue }
+          if (ch === '\n') { result += '\\n'; continue }
+          if (ch === '\r') { result += '\\r'; continue }
+          if (ch === '\t') { result += '\\t'; continue }
+          result += ch
+        } else {
+          if (ch === '"') { inString = true }
+          result += ch
+        }
+      }
+      return result
+    }
+
     function parseJSON(raw: string, label: string) {
       const cleaned = raw.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim()
-      try { return JSON.parse(cleaned) }
-      catch {
-        const m = cleaned.match(/\{[\s\S]*\}/)
-        if (m) {
-          try { return JSON.parse(m[0]) } catch { /* fall through to throw below */ }
-        }
-        console.error(
-          `[generate] ${label} JSON parse failed. Head: ${cleaned.slice(0, 300)} ... Tail: ${cleaned.slice(-300)}`
-        )
-        throw new Error(`${label} response could not be parsed. Please try again.`)
-      }
+
+      // Attempt 1: parse as-is
+      try { return JSON.parse(cleaned) } catch { /* try next */ }
+
+      // Attempt 2: extract outermost {...} in case of a stray preamble/trailing remark
+      const extracted = cleaned.match(/\{[\s\S]*\}/)?.[0] ?? cleaned
+
+      // Attempt 3: extracted text, as-is
+      try { return JSON.parse(extracted) } catch { /* try next */ }
+
+      // Attempt 4: sanitize raw control characters inside string values, then parse
+      const sanitized = sanitizeControlCharsInStrings(extracted)
+      try { return JSON.parse(sanitized) } catch { /* fall through to throw below */ }
+
+      console.error(
+        `[generate] ${label} JSON parse failed. Head: ${cleaned.slice(0, 300)} ... Tail: ${cleaned.slice(-300)}`
+      )
+      throw new Error(`${label} response could not be parsed. Please try again.`)
     }
 
     const socialText = socialMessage.content[0].type === 'text' ? socialMessage.content[0].text : ''
